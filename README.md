@@ -42,6 +42,12 @@ This repository teaches the stack.
 4. Copy [Wake Protocol](templates/wake-protocol.md).
 5. Use [Memory Patterns](docs/memory-patterns.md) before building a large archive.
 
+## Project Status
+
+This is the v0.1 public teaching skeleton. See [Roadmap](ROADMAP.md) for the planned Supabase setup pack, autonomy pack, and reference harness.
+
+Contributions, field reports, and careful critique are welcome. Start with [Contributing](CONTRIBUTING.md), or open an issue using one of the templates.
+
 ## Coming Setup Pack
 
 This first public release is the teaching skeleton. We also plan to offer a companion setup pack that helps with the two pieces most people cannot easily build alone:
