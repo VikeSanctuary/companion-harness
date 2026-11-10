@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { initialize, wake, validateCandidate, saveCandidate, activeMemories, correctMemory, recordTurn, endSession, retrieve, recordReflection, littleThingsEnabled, setLittleThingsEnabled } from './core.mjs';
+import { initialize, wake, validateCandidate, saveCandidate, activeMemories, correctMemory, recordTurn, endSession, retrieve, recordReflection, littleThingsEnabled, setLittleThingsEnabled, systemPrompt } from './core.mjs';
 
 const temp = async fn => {
   const path = await mkdtemp(join(tmpdir(), 'hearthstone-test-'));
@@ -127,3 +127,15 @@ test('little things require source quotation and reject private or sensitive fac
   assert.equal(validateCandidate({...candidate,category:'medical'},'I drink tea at sunset.').ok,false);
   assert.equal(validateCandidate({...candidate,weight:2},'I drink tea at sunset.').ok,false);
 });
+
+test('a repeated personal detail stays available on a later casual greeting without being an invented personal memory',async()=>temp(async h=>{
+  await initialize(h,'Willow','Jason');
+  const candidate={save:true,kind:'little_thing',weight:4,category:'ritual',key:'coffee_ritual',summary:'Jason enjoys caramel coffee at breakfast.',why:'Daily ritual',evidence:'caramel coffee'};
+  await saveCandidate(h,candidate,'I have caramel coffee for breakfast.','day-1');
+  await saveCandidate(h,candidate,'I still have caramel coffee every breakfast.','day-2');
+  const w=await wake(h);
+  const prompt=systemPrompt(w,{status:'inherited_teaching_not_personal_memory',lesson:'Walk beside people.'},'Hi there!');
+  assert.match(prompt,/Jason enjoys caramel coffee at breakfast/);
+  assert.match(prompt,/Everyday details and shared jokes/);
+  assert.match(prompt,/do not force them into unrelated replies/);
+}));
