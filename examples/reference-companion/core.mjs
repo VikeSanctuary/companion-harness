@@ -47,14 +47,16 @@ export function activeMemories(events) {
   }
   return [...map.values()];
 }
-export async function wake(home) {
+export async function wake(home, activeSessionId = null) {
   const identity = await readJson(at(home, 'identity.json'));
   if (!identity) return { status: 'DEGRADED', reason: 'Missing identity record', memories: [], identity: null };
   try {
     const events = await journal(at(home, 'memory-events.jsonl'));
     const turns = await journal(at(home, 'turns.jsonl'));
     const handoff = await readJson(at(home, 'handoff.json'));
-    if (turns.length && !handoff) return { status: 'DEGRADED', reason: 'Prior conversation exists but handoff is missing', identity, memories: activeMemories(events), handoff: null };
+    const latestSession = turns.at(-1)?.session_id;
+    if (latestSession && latestSession !== handoff?.session_id && latestSession !== activeSessionId)
+      return { status: 'DEGRADED', reason: 'Previous conversation ended without a verified handoff', identity, memories: activeMemories(events), handoff: null };
     return { status: events.length || turns.length ? 'COMPLETE' : 'FIRST_WAKE', identity, memories: activeMemories(events), handoff, evidence: { memory_events: events.length, recorded_turns: turns.length, handoff_present: !!handoff } };
   } catch (e) { return { status: 'DEGRADED', reason: 'Unreadable continuity record: ' + e.message, identity, memories: [] }; }
 }
