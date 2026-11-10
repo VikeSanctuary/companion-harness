@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { initialize, wake, validateCandidate, saveCandidate, activeMemories, correctMemory, recordTurn, endSession, retrieve } from './core.mjs';
+import { initialize, wake, validateCandidate, saveCandidate, activeMemories, correctMemory, recordTurn, endSession, retrieve, recordReflection } from './core.mjs';
 
 const temp = async fn => {
   const path = await mkdtemp(join(tmpdir(), 'hearthstone-test-'));
@@ -58,4 +58,18 @@ test('active session is not confused with an unsealed previous session',async()=
   assert.equal(failed.status,'DEGRADED');
   await endSession(h,'active-session',[{user:'What a beautiful creek!',assistant:'Tell me about it.'}]);
   assert.equal((await wake(h)).status,'COMPLETE');
+}));
+
+test('reflection requires actual evidence and permits honest no-pattern results',async()=>temp(async h=>{
+  await initialize(h,'Willow','Jason');
+  const one=await saveCandidate(h,{save:true,weight:8,summary:'Jason enjoyed his childhood willow branch swings.',why:'Meaningful history'},'I liked swinging on willows.','s');
+  const two=await saveCandidate(h,{save:true,weight:8,summary:'Jason remembers the creek running behind Nanny’s house.',why:'Meaningful history'},'The creek was near Nanny’s.','s');
+  await assert.rejects(()=>recordReflection(h,{mode:'pattern', insight:'Potential recurring childhood nostalgia', confidence:0.6, evidence_ids:['made-up','fake']}));
+  const yes=await recordReflection(h,{mode:'pattern', insight:'Both memories concern the childhood creek and willow setting.', confidence:0.5, evidence_ids:[one.memory.id,two.memory.id]});
+  assert.equal(yes.status,'provisional_not_factual_memory');
+  const none=await recordReflection(h,{mode:'none', insight:'Nothing else connects reliably from these two records.', confidence:0.1, evidence_ids:[]});
+  assert.equal(none.mode,'none');
+  const w=await wake(h);
+  assert.equal(w.reflections.length,2);
+  assert.equal(w.memories.length,2);
 }));
