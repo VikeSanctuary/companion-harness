@@ -75,7 +75,7 @@ async function main() {
       catch(e) { console.log('Not corrected: ' + e.message); }
       continue;
     }
-    state = await wake(home);
+    state = await wake(home, sessionId);
     if (state.status === 'DEGRADED') { console.log('Continuity degraded; stopping.'); break; }
     const messages = [
       {role:'system',content:systemPrompt(state,teaching,user)},
