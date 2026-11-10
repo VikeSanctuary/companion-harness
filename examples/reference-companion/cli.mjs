@@ -2,7 +2,7 @@ import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { defaultHome, initialize, wake, systemPrompt, saveCandidate, correctMemory, recordTurn, endSession, recordReflection } from './core.mjs';
+import { defaultHome, initialize, wake, systemPrompt, saveCandidate, correctMemory, recordTurn, endSession, recordReflection, littleThingsEnabled, setLittleThingsEnabled } from './core.mjs';
 
 const rl = createInterface({ input:stdin, output:stdout });
 const home = defaultHome();
@@ -27,14 +27,19 @@ async function ollama(messages) {
   if (!reply) throw new Error('Model returned no usable text');
   return reply;
 }
-async function proposeMemory(user, response) {
+async function proposeMemory(user, response, allowLittleThings) {
   const instructions = [
-    'You are reviewing one conversation turn for durable autobiographical memory.',
-    'Return ONLY JSON: {"save":boolean,"weight":integer_1_to_10,"summary":string,"why":string}.',
-    'Save only durable user preferences, meaningful shared moments, or explicit corrections.',
-    'Do not save greetings, casual filler, secrets, or unsupported inferences.',
-    'Summary must faithfully describe the USER message. Do not invent experiences or memories.',
-    'Decide independently; false is often appropriate.'
+    'Review a single conversation turn for selective memory. Return ONLY valid JSON.',
+    'Fields: save:boolean, kind:"significant"|"little_thing", weight:integer_1_to_10, summary:string, why:string.',
+    'Save important long-term developments as kind significant with weight 7-10.',
+    'When enabled, kind little_thing may capture a nonsensitive, explicitly user-offered preference, ritual, favorite expression, running joke, interest or everyday story detail at weight 3-6.',
+    'Little things also matter; they do not need to be life-changing, but must be specific and potentially useful later.',
+    'For little_thing add category from preference|ritual|expression|humor|interest|story_detail, a stable lowercase snake_case key for the topic, and evidence as an exact 4-160 character quotation from the USER message.',
+    'Do NOT infer private facts or save health, political, religious, financial, intimate or identifying information as little things.',
+    'Do not save random greetings, filler, secrets, model-generated assumptions, or details only in the assistant reply.',
+    'If there is nothing durable, use {"save":false}. One candidate maximum per turn.',
+    'Never present the act of proposing a memory as a successful save.',
+    'Everyday capture enabled: ' + allowLittleThings
   ].join('\n');
   const raw = await ollama([{role:'system',content:instructions},{role:'user',content:JSON.stringify({ user_message:user, companion_reply:response })}]);
   return JSON.parse(raw);
@@ -54,7 +59,7 @@ async function main() {
   console.log('Retrieved memories: ' + state.memories.length + ' | Model: ' + model);
   const teaching = JSON.parse(await readFile(new URL('./teachings.json', import.meta.url),'utf8'));
   const sessionId = randomUUID(), turns = [];
-  console.log('Commands: /memories, /reflect, /correct <memory-id> <replacement>, /quit\n');
+  console.log('Commands: /memories, /littlethings [on|off], /reflect, /correct <memory-id> <replacement>, /quit\n');
   while (true) {
     const user = (await rl.question('You: ')).trim();
     if (!user) continue;
@@ -65,7 +70,15 @@ async function main() {
     }
     if (user === '/memories') {
       state = await wake(home);
-      for (const m of state.memories) console.log(m.id + ' [weight ' + m.weight + '] ' + m.summary);
+      for (const m of state.memories) console.log(m.id + ' [' + (m.memory_type || 'significant') + ', weight ' + m.weight + (m.mentions > 1 ? ', mentioned in ' + m.mentions + ' sessions' : '') + '] ' + m.summary);
+      continue;
+    }
+    if (user === '/littlethings' || user.startsWith('/littlethings ')) {
+      const option = user.slice('/littlethings'.length).trim();
+      if (!option) { console.log('Everyday memory capture: ' + ((await littleThingsEnabled(home)) ? 'ON' : 'OFF')); continue; }
+      if (!['on','off'].includes(option)) { console.log('Use /littlethings on or /littlethings off'); continue; }
+      await setLittleThingsEnabled(home, option === 'on');
+      console.log('Everyday memory capture is now ' + option.toUpperCase() + '. Existing memories and normal session logs are unchanged.');
       continue;
     }
     if (user === '/reflect') {
@@ -103,9 +116,10 @@ async function main() {
     await recordTurn(home,sessionId,user,reply);
     turns.push({user,assistant:reply});
     try {
-      const candidate = await proposeMemory(user,reply);
+      const candidate = await proposeMemory(user,reply,await littleThingsEnabled(home));
       const result = await saveCandidate(home,candidate,user,sessionId);
       if (result.saved) console.log('[Memory saved and read back: ' + result.memory.id + ']');
+      if (result.reinforced) console.log('[An everyday detail came up again; prior memory read back: ' + result.memory.id + ']');
       // Silence on declines; conversation is primary, memory runs underneath.
     } catch(e) { console.log('[Memory review incomplete — no save claimed: ' + e.message + ']'); }
   }
