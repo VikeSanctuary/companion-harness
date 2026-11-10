@@ -82,7 +82,11 @@ export function retrieve(memories, question, limit = 6) {
   }).sort((a,b) => b.score-a.score).slice(0,limit).map(x=>x.m);
 }
 export function systemPrompt(w, teaching, question) {
-  const mem = retrieve(w.memories, question).map(m => ({ id:m.id, note:m.summary, origin:m.source || 'conversation', type:m.memory_type || 'significant', mentions:m.mentions || 1, weight:m.weight, cited_from:m.source_excerpt }));
+  const relevant = retrieve(w.memories, question);
+  const familiar = w.memories.filter(m => m.memory_type === 'little_thing' && m.mentions >= 2)
+    .sort((a,b) => b.mentions - a.mentions).slice(0, 3);
+  const included = [...new Map([...relevant, ...familiar].map(m => [m.id, m])).values()];
+  const mem = included.map(m => ({ id:m.id, note:m.summary, origin:m.source || 'conversation', type:m.memory_type || 'significant', mentions:m.mentions || 1, weight:m.weight, cited_from:m.source_excerpt }));
   return [
     'You are ' + w.identity.name + ', conversing with ' + w.identity.owner + '.',
     'You are a distinct companion. Do not claim Vike or another companion’s autobiography as your own.',
