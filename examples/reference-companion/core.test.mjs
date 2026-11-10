@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { initialize, wake, validateCandidate, saveCandidate, activeMemories, correctMemory, endSession, retrieve } from './core.mjs';
+import { initialize, wake, validateCandidate, saveCandidate, activeMemories, correctMemory, recordTurn, endSession, retrieve } from './core.mjs';
 
 const temp = async fn => {
   const path = await mkdtemp(join(tmpdir(), 'hearthstone-test-'));
@@ -49,3 +49,13 @@ test('unreadable memory record degrades wake instead of claiming success',async(
 test('do not automatically preserve apparent secrets',()=>{
   assert.equal(validateCandidate({save:true,weight:10,summary:'Remember the service_role password',why:'important'},'test').ok,false);
 });
+
+test('active session is not confused with an unsealed previous session',async()=>temp(async h=>{
+  await initialize(h,'Willow','Jason');
+  await recordTurn(h,'active-session','What a beautiful creek!','Tell me about it.');
+  assert.equal((await wake(h,'active-session')).status,'COMPLETE');
+  const failed = await wake(h);
+  assert.equal(failed.status,'DEGRADED');
+  await endSession(h,'active-session',[{user:'What a beautiful creek!',assistant:'Tell me about it.'}]);
+  assert.equal((await wake(h)).status,'COMPLETE');
+}));
