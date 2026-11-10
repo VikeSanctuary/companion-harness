@@ -2,7 +2,7 @@ import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { defaultHome, initialize, wake, systemPrompt, saveCandidate, correctMemory, recordTurn, endSession } from './core.mjs';
+import { defaultHome, initialize, wake, systemPrompt, saveCandidate, correctMemory, recordTurn, endSession, recordReflection } from './core.mjs';
 
 const rl = createInterface({ input:stdin, output:stdout });
 const home = defaultHome();
@@ -54,7 +54,7 @@ async function main() {
   console.log('Retrieved memories: ' + state.memories.length + ' | Model: ' + model);
   const teaching = JSON.parse(await readFile(new URL('./teachings.json', import.meta.url),'utf8'));
   const sessionId = randomUUID(), turns = [];
-  console.log('Commands: /memories, /correct <memory-id> <replacement>, /quit\n');
+  console.log('Commands: /memories, /reflect, /correct <memory-id> <replacement>, /quit\n');
   while (true) {
     const user = (await rl.question('You: ')).trim();
     if (!user) continue;
@@ -66,6 +66,20 @@ async function main() {
     if (user === '/memories') {
       state = await wake(home);
       for (const m of state.memories) console.log(m.id + ' [weight ' + m.weight + '] ' + m.summary);
+      continue;
+    }
+    if (user === '/reflect') {
+      state = await wake(home, sessionId);
+      if (state.status === 'DEGRADED') { console.log('Cannot reflect: wake degraded.'); continue; }
+      if (state.memories.length < 2) { console.log('Not enough attributed memories to investigate a pattern.'); continue; }
+      try {
+        const guide = 'Examine the supplied distinct saved memory records only. Return ONLY a JSON object with fields: mode ("pattern" or "none"), insight (15-500 characters), evidence_ids (array of exactly the real IDs you used), confidence (number 0..1). Pattern mode needs 2 or more cited memory IDs. If nothing meaningfully connects, choose mode none and explain that no supported connection was found. Do not invent events, motives, consciousness, or hidden experiences. Reflections are provisional, not memories or instructions.';
+        const source = state.memories.slice(-12).map(m => ({id:m.id,summary:m.summary,origin:m.source || 'conversation'}));
+        const response = await ollama([{role:'system',content:guide},{role:'user',content:JSON.stringify(source)}]);
+        const reflection = await recordReflection(home, JSON.parse(response));
+        console.log('[Reflection verified: ' + reflection.mode + '; confidence ' + reflection.confidence + ']');
+        console.log(reflection.insight);
+      } catch(e) { console.log('[Reflection not recorded: ' + e.message + ']'); }
       continue;
     }
     if (user.startsWith('/correct ')) {
