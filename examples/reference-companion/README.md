@@ -6,6 +6,24 @@ This is a **small, optional, local-first demonstration** of the continuity patte
 
 **Requirements:** Node.js 20+, Ollama or a compatible HTTPS endpoint, and a model you have permission to use. No Supabase, GitHub, or paid plan is required. Data is stored in `~/.hearthstone-companion` (or `HEARTHSTONE_HOME`).
 
+## Qwen / Ollama pilot notes (read before Jason's first run)
+
+The example defaults to `qwen3.5:4b`. In `cli.mjs` the current Ollama-compatible chat requests use `stream: false` and `think: false`, and read the assistant reply from `message.content`. Those are deliberate defaults for a simple non-streaming companion exchange, **not proof that all Qwen variants and providers behave alike**.
+
+Earlier Riverbank Qwen/Ollama troubleshooting used a **4,096-token context baseline** (`num_ctx: 4096`) and rejected responses that contained inline `<think>` text. **This reference implementation does not yet explicitly set `options.num_ctx` or reject inline thinking tags.** It relies on the server's configured context window and on how that server responds to `think: false`. Check model/version behavior on the intended machine before interpreting a strange reply as companion behavior. A model's advertised maximum context is not a promise that it fits the machine's memory.
+
+**Structured-output gap:** the main companion reply is ordinary text, but the automatic memory-proposal and optional reflection calls expect a *JSON object* and use `JSON.parse()`. The current code asks for JSON in the instructions but **does not send Ollama's `format: "json"` or a JSON schema** on those calls. A Qwen variant may return extra prose or malformed JSON, causing `[Memory review incomplete — no save claimed: ...]` or `[Reflection not recorded: ...]`. A successful chat response alone **does not prove memory saving**. Adding structured output with validation and tests is still work to do; do not silently mark that step complete.
+
+**Human first-run checks:**
+
+1. Confirm `node --version` is 20+ and `ollama list` shows the model you intend to use. To use this default, pull it only if needed: `ollama pull qwen3.5:4b`. An already-installed compatible model can be selected instead; do not unnecessarily alter a working local inference setup.
+2. Run `node --test core.test.mjs` in this directory. These are **offline unit tests**, not a live Qwen or Jason-hardware acceptance test.
+3. Set `OLLAMA_MODEL` to the installed model and start `node cli.mjs`. In PowerShell: `$env:OLLAMA_MODEL = "qwen3.5:4b"`; in Bash: `export OLLAMA_MODEL=qwen3.5:4b`.
+4. Have a short conversation, check `/memories`, type `/quit`, restart and try recalling a nonsensitive detail. Observe actual save/readback receipts and any incomplete-memory notices. Then use `/correct` on a test memory and verify the corrected recall after restart. Only report a pass if these steps actually work.
+5. Keep the endpoint on `127.0.0.1` for first testing. The adapter intentionally rejects plain HTTP to remote IPs, including other hosts on a private subnet; arbitrary HTTPS endpoints must actually implement the Ollama chat schema. Do not paste private credentials or conversations into an unverified remote service.
+
+**Supabase boundary:** this draft demo uses local plaintext JSONL under `~/.hearthstone-companion`. It **does not connect to Supabase**, create tables, configure RLS, or run database triggers or cron jobs. The repository's planned Supabase setup pack is not part of this working example. Do not point it at the private Riverbank/Flamecore database or reuse those credentials. A separate, permissioned Jason-owned Supabase instance can be considered *after* the local baseline is tested and a clean setup pack exists.
+
 ## Run locally
 
 From this directory:
