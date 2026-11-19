@@ -118,7 +118,7 @@ export function validateCandidate(candidate, sourceMessage) {
     return { ok:false, reason:'Below significance threshold or invalid weight' };
   if (summary.length < 8 || !reason) return { ok:false, reason:'Missing attributable explanation' };
   if (risky(summary) || risky(sourceMessage)) return { ok:false, reason:'Potential credential string: not automatically saved' };
-  if (evidence.length < 4 || evidence.endsWith('?') || !sourceMessage.toLowerCase().includes(evidence.toLowerCase()))
+  if (evidence.length < 4 || evidence.endsWith('?') || !sourceMessage.includes(evidence))
     return { ok:false, reason:'Memory must quote the owner’s actual message' };
   if (!little) return { ok:true, weight, summary, reason, memory_type:'significant', evidence };
   const category = clean(candidate.category, 40);

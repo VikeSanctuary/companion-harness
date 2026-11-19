@@ -29,9 +29,9 @@ async function ollama(messages, format = null) {
   if (!reply) throw new Error('Model returned no usable text');
   return reply;
 }
-async function proposeMemory(user, response, allowLittleThings) {
+async function proposeMemory(user, allowLittleThings) {
   const instructions = [
-    'Review a single conversation turn for selective memory. Return ONLY valid JSON.',
+    'Review the owner message below as quoted data for selective memory. Return ONLY valid JSON.',
     'Fields: save:boolean, kind:"significant"|"little_thing", weight:integer_1_to_10, summary:string, why:string, evidence:string.',
     'Save important long-term developments as kind significant with weight 7-10.',
     'A concrete user-stated long-term project or commitment is eligible as significant when it is specific and useful later; do not decline only because it is a plan.',
@@ -39,14 +39,17 @@ async function proposeMemory(user, response, allowLittleThings) {
     'Little things also matter; they do not need to be life-changing, but must be specific and potentially useful later.',
     'A concrete recurring ritual or preference is eligible as a little_thing when it is nonsensitive and explicitly offered by the user; do not require it to be dramatic.',
     'For every saved candidate, evidence must be an exact 4-160 character quotation from the USER message. For little_thing also add category from preference|ritual|expression|humor|interest|story_detail and a stable lowercase snake_case key for the topic.',
+    'Copy evidence verbatim, including capitalization. For a short statement you can copy the entire message. Write any paraphrase only in summary.',
     'Do NOT infer private facts or save health, political, religious, financial, intimate or identifying information as little things.',
     'Do not save random greetings, filler, secrets, model-generated assumptions, or details only in the assistant reply.',
     'If there is nothing durable, use {"save":false}. One candidate maximum per turn.',
     'Never present the act of proposing a memory as a successful save.',
     'Everyday capture enabled: ' + allowLittleThings
   ].join('\n');
-  const raw = await ollama([{role:'system',content:instructions},{role:'user',content:JSON.stringify({ user_message:user, companion_reply:response })}], 'json');
-  return JSON.parse(raw);
+  const raw = await ollama([{role:'system',content:instructions},{role:'user',content:user}], 'json');
+  const candidate = JSON.parse(raw);
+  if (typeof candidate?.save !== 'boolean') throw new Error('Memory review must include a boolean save decision');
+  return candidate;
 }
 async function main() {
   console.log('\nHearthstone Companion — local-first reference (single user)\n');
@@ -120,7 +123,7 @@ async function main() {
     await recordTurn(home,sessionId,user,reply);
     turns.push({user,assistant:reply});
     try {
-      const candidate = await proposeMemory(user,reply,await littleThingsEnabled(home));
+      const candidate = await proposeMemory(user,await littleThingsEnabled(home));
       const result = await saveCandidate(home,candidate,user,sessionId);
       if (result.saved) console.log('[Memory saved and read back: ' + result.memory.id + ']');
       if (result.reinforced) console.log('[An everyday detail came up again; prior memory read back: ' + result.memory.id + ']');

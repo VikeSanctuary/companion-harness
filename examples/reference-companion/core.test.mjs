@@ -81,6 +81,8 @@ test('automatic memories require current-turn evidence',()=>{
   const candidate={save:true,weight:8,summary:'The owner plans a cedar bookshelf.',why:'Long-term project',evidence:'What long-term project did I tell you about?'};
   assert.equal(validateCandidate(candidate,'What long-term project did I tell you about?').ok,false);
   assert.equal(validateCandidate({...candidate,evidence:'cedar bookshelf'},'What long-term project did I tell you about?').ok,false);
+  assert.equal(validateCandidate({...candidate,evidence:'Cedar bookshelf'},'I plan to build a cedar bookshelf.').ok,false);
+  assert.equal(validateCandidate({...candidate,evidence:'cedar bookshelf'},'I plan to build a cedar bookshelf.').ok,true);
 });
 
 test('credential-like content is redacted from persisted turns and handoffs',async()=>temp(async h=>{
