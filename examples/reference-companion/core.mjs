@@ -112,13 +112,14 @@ export function validateCandidate(candidate, sourceMessage) {
   if (!candidate || candidate.save !== true) return { ok:false, reason:'Companion declined to save' };
   const weight = Number(candidate.weight);
   const summary = clean(candidate.summary, 260), reason = clean(candidate.why, 180);
-  const evidence = clean(candidate.evidence, 160);
+  const rawEvidence = typeof candidate.evidence === 'string' ? candidate.evidence.trim() : '';
+  const evidence = !sourceMessage.includes(rawEvidence) && /^"[^]*"$/.test(rawEvidence) ? rawEvidence.slice(1, -1) : rawEvidence;
   const little = candidate.kind === 'little_thing';
   if (!Number.isInteger(weight) || (little ? weight < 3 || weight > 6 : weight < 7 || weight > 10))
     return { ok:false, reason:'Below significance threshold or invalid weight' };
   if (summary.length < 8 || !reason) return { ok:false, reason:'Missing attributable explanation' };
   if (risky(summary) || risky(sourceMessage)) return { ok:false, reason:'Potential credential string: not automatically saved' };
-  if (evidence.length < 4 || evidence.endsWith('?') || !sourceMessage.includes(evidence))
+  if (evidence.length < 4 || evidence.length > 160 || evidence.endsWith('?') || !sourceMessage.includes(evidence))
     return { ok:false, reason:'Memory must quote the owner’s actual message' };
   if (!little) return { ok:true, weight, summary, reason, memory_type:'significant', evidence };
   const category = clean(candidate.category, 40);
@@ -147,7 +148,10 @@ export async function saveCandidate(home, candidate, sourceMessage, sessionId) {
     await append(home, 'receipts.jsonl', receipt);
     return { saved:false, outcome:'reinforced', reinforced:true, memory:confirmed, receipt };
   }
-  if (active.some(m => normalized(m.summary) === normalized(valid.summary))) return { saved:false, outcome:'duplicate', reason:'Duplicate memory' };
+  if (active.some(m => normalized(m.summary) === normalized(valid.summary) ||
+    (valid.memory_type === 'significant' && m.memory_type === 'significant' &&
+      valid.evidence === sourceMessage && m.source_excerpt === sourceMessage)))
+    return { saved:false, outcome:'duplicate', reason:'Duplicate memory' };
   const today = iso().slice(0,10);
   if (events.filter(e => e.kind === 'memory' && e.at?.startsWith(today)).length >= 10) return { saved:false, outcome:'blocked', reason:'Daily automatic memory limit reached' };
   const event = { id:randomUUID(), kind:'memory', at:iso(), session_id:sessionId, summary:valid.summary, weight:valid.weight, why:valid.reason, memory_type:valid.memory_type, category:valid.category || null, key:valid.key || null, source:'companion_selected_from_user_turn', source_excerpt:valid.evidence, privacy:'local_private' };

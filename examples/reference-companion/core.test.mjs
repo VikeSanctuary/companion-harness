@@ -83,7 +83,18 @@ test('automatic memories require current-turn evidence',()=>{
   assert.equal(validateCandidate({...candidate,evidence:'cedar bookshelf'},'What long-term project did I tell you about?').ok,false);
   assert.equal(validateCandidate({...candidate,evidence:'Cedar bookshelf'},'I plan to build a cedar bookshelf.').ok,false);
   assert.equal(validateCandidate({...candidate,evidence:'cedar bookshelf'},'I plan to build a cedar bookshelf.').ok,true);
+  assert.equal(validateCandidate({...candidate,evidence:'"cedar bookshelf"'},'I plan to build a cedar bookshelf.').evidence,'cedar bookshelf');
+  assert.equal(validateCandidate({...candidate,evidence:'"birch bookshelf"'},'I plan to build a cedar bookshelf.').ok,false);
 });
+
+test('repeated full evidence prevents duplicate significant memories with different summaries',async()=>temp(async h=>{
+  await initialize(h,'Willow','Jason');
+  const message = 'I plan to build a cedar bookshelf.';
+  const candidate = {save:true,weight:8,summary:message,why:'Long-term project',evidence:message};
+  assert.equal((await saveCandidate(h,candidate,message,'first')).outcome,'saved');
+  const repeat = {...candidate,summary:'The owner intends to make a cedar bookshelf.',evidence:'"' + message + '"'};
+  assert.equal((await saveCandidate(h,repeat,message,'second')).outcome,'duplicate');
+}));
 
 test('credential-like content is redacted from persisted turns and handoffs',async()=>temp(async h=>{
   await initialize(h,'Willow','Jason');
