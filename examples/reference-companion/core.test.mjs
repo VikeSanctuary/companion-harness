@@ -63,6 +63,10 @@ test('quitting a correction-only session preserves the last conversation handoff
   assert.equal(restarted.status,'COMPLETE');
   assert.deepEqual(restarted.handoff,handoff);
   assert.equal(restarted.memories[0].summary,replacement);
+  const prompt = systemPrompt(restarted,{},'What bookshelf do I plan to build?');
+  assert.ok(prompt.includes('explicit owner corrections supersede'));
+  assert.ok(prompt.indexOf(replacement) > prompt.indexOf(message));
+  assert.ok(!prompt.includes('"cited_from":"' + message + '"'));
 }));
 test('unreadable memory record degrades wake instead of claiming success',async()=>temp(async h=>{
   await initialize(h,'Willow','Jason');
