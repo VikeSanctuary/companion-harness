@@ -20,10 +20,18 @@ test('selective memory decline and readback-verifiable preservation', async()=>t
   assert.equal(validateCandidate({save:true,weight:3,summary:'A harmless note',why:'low'},'hi').ok,false);
   const candidate = {save:true,weight:9,summary:'Jason remembers swinging from willow branches above a creek in Coburg as a child.',why:'Meaningful childhood memory',evidence:'swung from willow branches over the creek in Coburg'};
   const saved = await saveCandidate(h,candidate,'At Nanny’s we swung from willow branches over the creek in Coburg.','s1');
-  assert.equal(saved.saved,true); assert.equal(saved.receipt.verified,true);
+  assert.equal(saved.saved,true); assert.equal(saved.outcome,'saved'); assert.equal(saved.receipt.verified,true);
   const w = await wake(h); assert.equal(w.memories.length,1); assert.equal(w.memories[0].id,saved.memory.id);
   assert.equal((await saveCandidate(h,candidate,'same again','s1')).saved,false);
   assert.equal(retrieve(w.memories,'What was that willow tree creek story?')[0].id,saved.memory.id);
+}));
+test('review outcomes distinguish model decline from deterministic rejection',async()=>temp(async h=>{
+  await initialize(h,'Willow','Jason');
+  const declined=await saveCandidate(h,{save:false},'Hello there.','s1');
+  assert.deepEqual({outcome:declined.outcome,reason:declined.reason},{outcome:'declined',reason:'Companion declined to save'});
+  const rejected=await saveCandidate(h,{save:true,weight:8,summary:'A durable project note.',why:'Important'},'Hello there.','s1');
+  assert.equal(rejected.outcome,'rejected');
+  assert.equal(rejected.reason,'Memory must quote the owner’s actual message');
 }));
 test('corrections preserve event history but change active recall', async()=>temp(async h=>{
   await initialize(h,'Willow','Jason');
@@ -52,7 +60,7 @@ test('do not automatically preserve apparent secrets',()=>{
 
 test('automatic memories require current-turn evidence',()=>{
   const candidate={save:true,weight:8,summary:'The owner plans a cedar bookshelf.',why:'Long-term project',evidence:'What long-term project did I tell you about?'};
-  assert.equal(validateCandidate(candidate,'What long-term project did I tell you about?').ok,true);
+  assert.equal(validateCandidate(candidate,'What long-term project did I tell you about?').ok,false);
   assert.equal(validateCandidate({...candidate,evidence:'cedar bookshelf'},'What long-term project did I tell you about?').ok,false);
 });
 

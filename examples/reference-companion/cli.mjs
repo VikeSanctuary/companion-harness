@@ -34,8 +34,10 @@ async function proposeMemory(user, response, allowLittleThings) {
     'Review a single conversation turn for selective memory. Return ONLY valid JSON.',
     'Fields: save:boolean, kind:"significant"|"little_thing", weight:integer_1_to_10, summary:string, why:string, evidence:string.',
     'Save important long-term developments as kind significant with weight 7-10.',
+    'A concrete user-stated long-term project or commitment is eligible as significant when it is specific and useful later; do not decline only because it is a plan.',
     'When enabled, kind little_thing may capture a nonsensitive, explicitly user-offered preference, ritual, favorite expression, running joke, interest or everyday story detail at weight 3-6.',
     'Little things also matter; they do not need to be life-changing, but must be specific and potentially useful later.',
+    'A concrete recurring ritual or preference is eligible as a little_thing when it is nonsensitive and explicitly offered by the user; do not require it to be dramatic.',
     'For every saved candidate, evidence must be an exact 4-160 character quotation from the USER message. For little_thing also add category from preference|ritual|expression|humor|interest|story_detail and a stable lowercase snake_case key for the topic.',
     'Do NOT infer private facts or save health, political, religious, financial, intimate or identifying information as little things.',
     'Do not save random greetings, filler, secrets, model-generated assumptions, or details only in the assistant reply.',
@@ -122,7 +124,7 @@ async function main() {
       const result = await saveCandidate(home,candidate,user,sessionId);
       if (result.saved) console.log('[Memory saved and read back: ' + result.memory.id + ']');
       if (result.reinforced) console.log('[An everyday detail came up again; prior memory read back: ' + result.memory.id + ']');
-      // Silence on declines; conversation is primary, memory runs underneath.
+      if (!result.saved && !result.reinforced) console.log('[Memory review ' + result.outcome + ': ' + result.reason + ']');
     } catch(e) { console.log('[Memory review incomplete — no save claimed: ' + e.message + ']'); }
   }
 }

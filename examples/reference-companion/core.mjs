@@ -113,7 +113,7 @@ export function validateCandidate(candidate, sourceMessage) {
     return { ok:false, reason:'Below significance threshold or invalid weight' };
   if (summary.length < 8 || !reason) return { ok:false, reason:'Missing attributable explanation' };
   if (risky(summary) || risky(sourceMessage)) return { ok:false, reason:'Potential credential string: not automatically saved' };
-  if (evidence.length < 4 || !sourceMessage.toLowerCase().includes(evidence.toLowerCase()))
+  if (evidence.length < 4 || evidence.endsWith('?') || !sourceMessage.toLowerCase().includes(evidence.toLowerCase()))
     return { ok:false, reason:'Memory must quote the owner’s actual message' };
   if (!little) return { ok:true, weight, summary, reason, memory_type:'significant', evidence };
   const category = clean(candidate.category, 40);
@@ -126,32 +126,32 @@ export function validateCandidate(candidate, sourceMessage) {
 }
 export async function saveCandidate(home, candidate, sourceMessage, sessionId) {
   const valid = validateCandidate(candidate, sourceMessage);
-  if (!valid.ok) return { saved:false, reason:valid.reason };
+  if (!valid.ok) return { saved:false, outcome:candidate?.save === true ? 'rejected' : 'declined', reason:valid.reason };
   if (valid.memory_type === 'little_thing' && !(await littleThingsEnabled(home)))
-    return { saved:false, reason:'Everyday memory capture is turned off' };
+    return { saved:false, outcome:'blocked', reason:'Everyday memory capture is turned off' };
   const events = await journal(at(home, 'memory-events.jsonl'));
   const active = activeMemories(events);
   const existing = active.find(m => valid.memory_type === 'little_thing' && m.memory_type === 'little_thing' && m.key === valid.key);
   if (existing) {
-    if (existing.sessions_seen.includes(sessionId)) return { saved:false, reason:'Already observed in this session' };
+    if (existing.sessions_seen.includes(sessionId)) return { saved:false, outcome:'duplicate', reason:'Already observed in this session' };
     const reinforcement = { kind:'reinforcement', id:randomUUID(), target_id:existing.id, session_id:sessionId, at:iso(), source_excerpt:valid.evidence };
     await append(home, 'memory-events.jsonl', reinforcement);
     const confirmed = activeMemories(await journal(at(home, 'memory-events.jsonl'))).find(m => m.id === existing.id);
     if (!confirmed || !confirmed.sessions_seen.includes(sessionId)) throw new Error('Everyday detail reinforcement readback failed');
     const receipt = { id:randomUUID(), operation:'little_thing_reinforced', memory_id:existing.id, at:iso(), verified:true };
     await append(home, 'receipts.jsonl', receipt);
-    return { saved:false, reinforced:true, memory:confirmed, receipt };
+    return { saved:false, outcome:'reinforced', reinforced:true, memory:confirmed, receipt };
   }
-  if (active.some(m => normalized(m.summary) === normalized(valid.summary))) return { saved:false, reason:'Duplicate memory' };
+  if (active.some(m => normalized(m.summary) === normalized(valid.summary))) return { saved:false, outcome:'duplicate', reason:'Duplicate memory' };
   const today = iso().slice(0,10);
-  if (events.filter(e => e.kind === 'memory' && e.at?.startsWith(today)).length >= 10) return { saved:false, reason:'Daily automatic memory limit reached' };
+  if (events.filter(e => e.kind === 'memory' && e.at?.startsWith(today)).length >= 10) return { saved:false, outcome:'blocked', reason:'Daily automatic memory limit reached' };
   const event = { id:randomUUID(), kind:'memory', at:iso(), session_id:sessionId, summary:valid.summary, weight:valid.weight, why:valid.reason, memory_type:valid.memory_type, category:valid.category || null, key:valid.key || null, source:'companion_selected_from_user_turn', source_excerpt:valid.evidence, privacy:'local_private' };
   await append(home, 'memory-events.jsonl', event);
   const check = await journal(at(home, 'memory-events.jsonl'));
   if (!check.some(e => e.id === event.id)) throw new Error('Memory write not confirmed on readback');
   const receipt = { id:randomUUID(), at:iso(), operation:'memory_saved', memory_id:event.id, verified:true };
   await append(home, 'receipts.jsonl', receipt);
-  return { saved:true, memory:event, receipt };
+  return { saved:true, outcome:'saved', memory:event, receipt };
 }
 export async function correctMemory(home, id, replacement) {
   const summary = clean(replacement, 260);
