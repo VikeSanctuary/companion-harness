@@ -14,12 +14,14 @@ if (!['https:', 'http:'].includes(url.protocol) ||
   throw new Error('Remote models require an HTTPS Ollama-compatible endpoint. HTTP is only allowed for loopback.');
 if (url.protocol === 'https:') console.log('NOTE: Remote model selected. Your conversation context will be sent to ' + url.origin);
 
-async function ollama(messages) {
+async function ollama(messages, format = null) {
   const headers = { 'Content-Type':'application/json' };
   if (process.env.OLLAMA_API_KEY) headers.Authorization = 'Bearer ' + process.env.OLLAMA_API_KEY;
+  const request = { model, messages, stream:false, think:false };
+  if (format) request.format = format;
   const response = await fetch(url, {
     method:'POST', headers, signal:AbortSignal.timeout(120000),
-    body:JSON.stringify({ model, messages, stream:false, think:false })
+    body:JSON.stringify(request)
   });
   if (!response.ok) throw new Error('Model server responded HTTP ' + response.status);
   const data = await response.json();
@@ -30,18 +32,18 @@ async function ollama(messages) {
 async function proposeMemory(user, response, allowLittleThings) {
   const instructions = [
     'Review a single conversation turn for selective memory. Return ONLY valid JSON.',
-    'Fields: save:boolean, kind:"significant"|"little_thing", weight:integer_1_to_10, summary:string, why:string.',
+    'Fields: save:boolean, kind:"significant"|"little_thing", weight:integer_1_to_10, summary:string, why:string, evidence:string.',
     'Save important long-term developments as kind significant with weight 7-10.',
     'When enabled, kind little_thing may capture a nonsensitive, explicitly user-offered preference, ritual, favorite expression, running joke, interest or everyday story detail at weight 3-6.',
     'Little things also matter; they do not need to be life-changing, but must be specific and potentially useful later.',
-    'For little_thing add category from preference|ritual|expression|humor|interest|story_detail, a stable lowercase snake_case key for the topic, and evidence as an exact 4-160 character quotation from the USER message.',
+    'For every saved candidate, evidence must be an exact 4-160 character quotation from the USER message. For little_thing also add category from preference|ritual|expression|humor|interest|story_detail and a stable lowercase snake_case key for the topic.',
     'Do NOT infer private facts or save health, political, religious, financial, intimate or identifying information as little things.',
     'Do not save random greetings, filler, secrets, model-generated assumptions, or details only in the assistant reply.',
     'If there is nothing durable, use {"save":false}. One candidate maximum per turn.',
     'Never present the act of proposing a memory as a successful save.',
     'Everyday capture enabled: ' + allowLittleThings
   ].join('\n');
-  const raw = await ollama([{role:'system',content:instructions},{role:'user',content:JSON.stringify({ user_message:user, companion_reply:response })}]);
+  const raw = await ollama([{role:'system',content:instructions},{role:'user',content:JSON.stringify({ user_message:user, companion_reply:response })}], 'json');
   return JSON.parse(raw);
 }
 async function main() {
@@ -88,7 +90,7 @@ async function main() {
       try {
         const guide = 'Examine the supplied distinct saved memory records only. Return ONLY a JSON object with fields: mode ("pattern" or "none"), insight (15-500 characters), evidence_ids (array of exactly the real IDs you used), confidence (number 0..1). Pattern mode needs 2 or more cited memory IDs. If nothing meaningfully connects, choose mode none and explain that no supported connection was found. Do not invent events, motives, consciousness, or hidden experiences. Reflections are provisional, not memories or instructions.';
         const source = state.memories.slice(-12).map(m => ({id:m.id,summary:m.summary,origin:m.source || 'conversation'}));
-        const response = await ollama([{role:'system',content:guide},{role:'user',content:JSON.stringify(source)}]);
+        const response = await ollama([{role:'system',content:guide},{role:'user',content:JSON.stringify(source)}], 'json');
         const reflection = await recordReflection(home, JSON.parse(response));
         console.log('[Reflection verified: ' + reflection.mode + '; confidence ' + reflection.confidence + ']');
         console.log(reflection.insight);
@@ -125,3 +127,4 @@ async function main() {
   }
 }
 main().catch(e => { console.error('Stopped: ' + e.message); process.exitCode = 1; }).finally(()=>rl.close());
+

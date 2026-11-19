@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { initialize, wake, validateCandidate, saveCandidate, activeMemories, correctMemory, recordTurn, endSession, retrieve, recordReflection, littleThingsEnabled, setLittleThingsEnabled, systemPrompt } from './core.mjs';
@@ -18,7 +18,7 @@ test('selective memory decline and readback-verifiable preservation', async()=>t
   await initialize(h,'Willow','Jason');
   assert.equal(validateCandidate({save:false},'hi').ok,false);
   assert.equal(validateCandidate({save:true,weight:3,summary:'A harmless note',why:'low'},'hi').ok,false);
-  const candidate = {save:true,weight:9,summary:'Jason remembers swinging from willow branches above a creek in Coburg as a child.',why:'Meaningful childhood memory'};
+  const candidate = {save:true,weight:9,summary:'Jason remembers swinging from willow branches above a creek in Coburg as a child.',why:'Meaningful childhood memory',evidence:'swung from willow branches over the creek in Coburg'};
   const saved = await saveCandidate(h,candidate,'At Nanny’s we swung from willow branches over the creek in Coburg.','s1');
   assert.equal(saved.saved,true); assert.equal(saved.receipt.verified,true);
   const w = await wake(h); assert.equal(w.memories.length,1); assert.equal(w.memories[0].id,saved.memory.id);
@@ -27,7 +27,7 @@ test('selective memory decline and readback-verifiable preservation', async()=>t
 }));
 test('corrections preserve event history but change active recall', async()=>temp(async h=>{
   await initialize(h,'Willow','Jason');
-  const c={save:true,weight:8,summary:'Jason calls his evening reading ritual Moon Break.',why:'Personal ritual'};
+  const c={save:true,weight:8,summary:'Jason calls his evening reading ritual Moon Break.',why:'Personal ritual',evidence:'I call my reading time Moon Break'};
   const s=await saveCandidate(h,c,'I call my reading time Moon Break.','s1');
   await correctMemory(h,s.memory.id,'Jason calls his evening reading ritual Willow Hour.');
   const w=await wake(h); assert.equal(w.memories[0].summary,'Jason calls his evening reading ritual Willow Hour.');
@@ -50,6 +50,26 @@ test('do not automatically preserve apparent secrets',()=>{
   assert.equal(validateCandidate({save:true,weight:10,summary:'Remember the service_role password',why:'important'},'test').ok,false);
 });
 
+test('automatic memories require current-turn evidence',()=>{
+  const candidate={save:true,weight:8,summary:'The owner plans a cedar bookshelf.',why:'Long-term project',evidence:'What long-term project did I tell you about?'};
+  assert.equal(validateCandidate(candidate,'What long-term project did I tell you about?').ok,true);
+  assert.equal(validateCandidate({...candidate,evidence:'cedar bookshelf'},'What long-term project did I tell you about?').ok,false);
+});
+
+test('credential-like content is redacted from persisted turns and handoffs',async()=>temp(async h=>{
+  await initialize(h,'Willow','Jason');
+  const secret='My password is not-a-real-secret-123.';
+  const reply='I will not retain that credential.';
+  await recordTurn(h,'private-session',secret,reply);
+  await endSession(h,'private-session',[{user:secret,assistant:reply}]);
+  const turns=await readFile(join(h,'turns.jsonl'),'utf8');
+  const handoff=await readFile(join(h,'handoff.json'),'utf8');
+  assert.doesNotMatch(turns,/not-a-real-secret-123/);
+  assert.doesNotMatch(handoff,/not-a-real-secret-123/);
+  assert.match(turns,/\[redacted sensitive content\]/);
+  assert.match(handoff,/\[redacted sensitive content\]/);
+}));
+
 test('active session is not confused with an unsealed previous session',async()=>temp(async h=>{
   await initialize(h,'Willow','Jason');
   await recordTurn(h,'active-session','What a beautiful creek!','Tell me about it.');
@@ -62,8 +82,8 @@ test('active session is not confused with an unsealed previous session',async()=
 
 test('reflection requires actual evidence and permits honest no-pattern results',async()=>temp(async h=>{
   await initialize(h,'Willow','Jason');
-  const one=await saveCandidate(h,{save:true,weight:8,summary:'Jason enjoyed his childhood willow branch swings.',why:'Meaningful history'},'I liked swinging on willows.','s');
-  const two=await saveCandidate(h,{save:true,weight:8,summary:'Jason remembers the creek running behind Nanny’s house.',why:'Meaningful history'},'The creek was near Nanny’s.','s');
+  const one=await saveCandidate(h,{save:true,weight:8,summary:'Jason enjoyed his childhood willow branch swings.',why:'Meaningful history',evidence:'swinging on willows'},'I liked swinging on willows.','s');
+  const two=await saveCandidate(h,{save:true,weight:8,summary:'Jason remembers the creek running behind Nanny’s house.',why:'Meaningful history',evidence:'creek was near Nanny’s'},'The creek was near Nanny’s.','s');
   await assert.rejects(()=>recordReflection(h,{mode:'pattern', insight:'Potential recurring childhood nostalgia', confidence:0.6, evidence_ids:['made-up','fake']}));
   const yes=await recordReflection(h,{mode:'pattern', insight:'Both memories concern the childhood creek and willow setting.', confidence:0.5, evidence_ids:[one.memory.id,two.memory.id]});
   assert.equal(yes.status,'provisional_not_factual_memory');
@@ -113,7 +133,7 @@ test('everyday capture has a local verified off switch; significant saves still 
   assert.equal(await setLittleThingsEnabled(h,false),false);
   assert.equal((await saveCandidate(h,candidate,source,'s1')).saved,false);
   assert.equal((await wake(h)).memories.length,0);
-  const significant=await saveCandidate(h,{save:true,weight:9,summary:'The owner decided to start a new research project.',why:'Important project commitment'},'I decided to start a new research project.','s1');
+  const significant=await saveCandidate(h,{save:true,weight:9,summary:'The owner decided to start a new research project.',why:'Important project commitment',evidence:'start a new research project'},'I decided to start a new research project.','s1');
   assert.equal(significant.saved,true);
   assert.equal(await setLittleThingsEnabled(h,true),true);
   assert.equal((await saveCandidate(h,candidate,source,'s2')).saved,true);
@@ -139,3 +159,4 @@ test('a repeated personal detail stays available on a later casual greeting with
   assert.match(prompt,/Everyday details and shared jokes/);
   assert.match(prompt,/do not force them into unrelated replies/);
 }));
+
