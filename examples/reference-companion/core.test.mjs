@@ -49,6 +49,21 @@ test('new session has honest, verified handoff',async()=>temp(async h=>{
   assert.equal(w.handoff.session_id,'session-one');
   assert.equal(w.handoff.kind,'conversation_excerpts_not_model_summary');
 }));
+test('quitting a correction-only session preserves the last conversation handoff',async()=>temp(async h=>{
+  await initialize(h,'Willow','Jason');
+  const message = 'I plan to build a cedar bookshelf.';
+  const candidate = {save:true,weight:8,summary:message,why:'Long-term project',evidence:message};
+  const saved = await saveCandidate(h,candidate,message,'conversation');
+  await recordTurn(h,'conversation',message,'That sounds worthwhile.');
+  const handoff = await endSession(h,'conversation',[{user:message,assistant:'That sounds worthwhile.'}]);
+  const replacement = 'I plan to build a birch bookshelf.';
+  await correctMemory(h,saved.memory.id,replacement);
+  assert.equal(await endSession(h,'correction-only',[]),null);
+  const restarted = await wake(h);
+  assert.equal(restarted.status,'COMPLETE');
+  assert.deepEqual(restarted.handoff,handoff);
+  assert.equal(restarted.memories[0].summary,replacement);
+}));
 test('unreadable memory record degrades wake instead of claiming success',async()=>temp(async h=>{
   await initialize(h,'Willow','Jason');
   await writeFile(join(h,'memory-events.jsonl'),'{broken json}\n');

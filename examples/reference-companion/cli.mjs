@@ -68,8 +68,8 @@ async function main() {
     const user = (await rl.question('You: ')).trim();
     if (!user) continue;
     if (user === '/quit') {
-      await endSession(home, sessionId, turns);
-      console.log('Session handoff written and read back. Goodbye.');
+      const handoff = await endSession(home, sessionId, turns);
+      console.log(handoff ? 'Session handoff written and read back. Goodbye.' : 'No conversation turns to hand off. Goodbye.');
       break;
     }
     if (user === '/memories') {

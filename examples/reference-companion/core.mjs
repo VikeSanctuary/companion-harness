@@ -171,6 +171,7 @@ export async function recordTurn(home, sessionId, user, assistant) {
   await append(home, 'turns.jsonl', { id:randomUUID(), at:iso(), session_id:sessionId, user:safeText(user,8000), assistant:safeText(assistant,12000) });
 }
 export async function endSession(home, sessionId, turns) {
+  if (!turns.length) return null;
   const prior = await readJson(at(home, 'handoff.json'));
   const excerpts = turns.slice(-4).map(t => ({ user:safeText(t.user,700), companion:safeText(t.assistant,700) }));
   const handoff = { session_id:sessionId, saved_at:iso(), kind:'conversation_excerpts_not_model_summary', excerpts, prior_session_id:prior?.session_id || null };
